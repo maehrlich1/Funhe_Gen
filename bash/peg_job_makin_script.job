@@ -1,0 +1,36 @@
+#!/bin/bash
+
+for samp in A1 A2 A3 A4 A5 A6 M1 M2 M3 M4 M5
+do
+echo "$samp"
+echo '#!/bin/bash' > /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh
+echo '#BSUB -J '"$samp"'' >> /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh
+echo '#BSUB -e run.err' >> /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh
+echo '#BSUB -o run.out' >> /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh
+echo '#BSUB -W 48:00' >> /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh           # <- that is your wall time, you probably do not need to specify that
+echo '#BSUB -n 4' >> /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh
+echo '#BSUB -R "span[ptile=4]"' >> /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh
+echo '#BSUB -u n.kron@umiami.edu' >> /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh
+echo '#BSUB -q bigmem'  >> /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh
+
+
+echo '/nethome/n.kron/Programs/local/STAR/STAR \
+--runThreadN 16 \
+--genomeDir /nethome/n.kron/RNAseq/AplCalGenIndicies \
+--readFilesIn /nethome/n.kron/RNAseq/PCBFProject/TRIMOUT/'"$samp"'_forward_paired.fq.gz \
+/nethome/n.kron/RNAseq/PCBFProject/TRIMOUT/'"$samp"'_reverse_paired.fq.gz \
+--readFilesCommand zcat \
+--outSAMtype BAM SortedByCoordinate \
+--chimSegmentMin 12 \
+--quantMode TranscriptomeSAM GeneCounts \
+--alignIntronMax 200000 --alignMatesGapMax 200000 \
+--alignSJDBoverhangMin 10 \
+--chimJunctionOverhangMin 12 \
+--twopassMode Basic \
+--twopass1readsN -1 \
+--outSAMstrandField intronMotif \
+--outFileNamePrefix /nethome/n.kron/RNAseq/PCBFProject/STARDONE/'"$samp"'_' >> /nethome/n.kron/RNAseq/PCBFProject/STARDONE/${samp}.sh
+
+
+bsub < /nethome/n.kron/RNAseq/PCBFProject/STARDONE/"$samp".sh
+done

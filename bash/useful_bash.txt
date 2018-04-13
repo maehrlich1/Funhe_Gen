@@ -1,0 +1,253 @@
+###----------------------- Cluster management ----------------------------###
+#---------------------------------------------------------------------------#
+#set password
+passwd
+
+# mounting cluster
+sshfs smomw311@nesh-fe.rz.uni-kiel.de:/sfs/fs3/work-geomar7/smomw311 ~/NEC_WORK -ovolname=NEC_WORK
+	
+	# mounting nodes on cluster (RZ):
+	cd /work_zfs/smomw287
+	sshfs rzcl287:/local287/smomw287  mount
+
+# ssh login
+ssh -X smomw311@nesh-fe.rz.uni-kiel.de
+
+#moving data securely and quickly to/from remote host
+
+rsync —-progress blabla.txt smomw311@nesh-fe.rz.uni-kiel.de:/sfs/fs3/work-geomar7/smomw311/
+
+# transfer data between users
+cd /sfs/fs3/work-geomar7
+chmod a+rx smomw262
+chmod a-rx smomw287 smomw262
+chmod u+rx smomw287 smomw262
+
+###------------------------ job management -----------------------####
+#--------------------------------------------------------------------#
+
+#load modules on cluster
+module avail
+module load gcc_4.8.2
+
+#submiting batch job to cluster
+qsub test_fastqc.sh
+
+# show job status
+qstat
+
+#check job progress
+qcat -e JOBID (also -o)
+
+###------------------------- secure interactive session ---------------------###
+#------------------------------------------------------------------------------#
+# list running sessions
+screen -ls
+
+# open new session
+screen -S SESSIONNAME
+	-> # leave session (still running)
+	press "ctrl+a" then "ctrl+d"
+	-> # quit session (from within)
+	exit 
+
+# reattach to session
+screen -d -r SESSIONNAME
+
+#if process already started
+put into bg then:
+
+disown -h %1
+
+#job will become unmanageable but also not terminate upon closing ssh
+
+###------------------------- moving around ----------------------------###
+#------------------------------------------------------------------------#
+#check node status
+htop (quit by pressing q)
+
+# add to path permanently
+emacs ~/.bashrc (modify this)
+source ~/.bashrc
+
+# show all files
+ls -a / -lh
+
+# list of files in directory
+du -a -h --max-depth=1 | sort -hr
+
+# ommiting terminal standard output
+> /dev/null
+
+#renaming files
+mv BLA.txt BLA.txt.gz
+
+# zip directory
+tar -zcvf archive-name.tar.gz directory-name
+
+#extract
+tar -xvf {file.tar}
+tar -zxvf {foo.tar.gz}
+tar xvjf filename.tar.bz2
+
+# compiling on cluster
+cat $HOME/.bash_history | less
+./configure --prefix=$WORK/software/bin
+
+# make a file executable
+chmod 755 FILENAME
+
+# check that two files are identical
+cmp -s file1 file2 || echo "files are different"
+
+# activate extended globs (can then use !(foo) to select everything but foo
+shopt -s extglob
+
+###-------------------- textfile handling --------------------###
+#---------------------------------------------------------------#
+# extracting lines from file
+sed -n '2,3p' test1.txt > test2.txt
+
+# removing character from textfile 
+sed 's/[|]//g' platanus_out_gapClosed_BACKUP.fasta.original > ../platanus_out_gapClosed.fasta
+
+#remove every other linebreak
+cat sizes_jelly_01 | paste - - > sizes_jelly_01.txt
+
+# remove lines containing pattern
+sed '/    0/d' ./reduced2.txt > reduced4.txt
+
+# add linebreack after pattern (MAC)
+sed 's/>* /\'$'\n/g'
+
+#downsample data by picking every nth line (and keep the header line)
+awk 'NR==1 {print $0} NR%n==0 {print $0}'
+
+#downsample data by averaging every 10 lines. the first awk just deletes the first line.
+awk 'NR>1 {print $3}' fc6_cov | awk '{sum+=$0} NR%1000==0 {print NR"\t"sum/1000; sum=0}' > mean_depth_along_genome.txt
+
+# output global bp positions by cum. summing contig lengths
+	awk 'BEGIN {contig=1} {cumsum=cumsum+contig; print $1"\t"$2"\t"cumsum; contig=$2}'
+
+# give total length of genome
+	tail -n 1 glob_coord.txt | awk '{print $2+$3-1}'
+
+###-------------------- fastA handling -----------------------###
+#---------------------------------------------------------------#
+# splittin a fasq file:
+split -l (4*n) test.fq segment
+
+#merging fasta files 
+	zcat dat1 dat2 dat3 | gzip dat_neu.fq.gz
+
+	better:
+	cat OM1_CGATGT_L001_R1_001.fastq.gz OM1_CGATGT_L001_R1_002.fastq.gz OM1_CGATGT_L001_R1_003.fastq.gz > new300s2.fq.gz
+
+	best:
+	cat OM1_CGATGT_L001_R1* > new300sSTAR.fq.gz
+
+# linebreak every 80 chars (fasta formatting)
+fold -w 80 -s foo.fa > foo_fold.fa
+ 
+#count fasta lengths (generate karyotype)
+awk '/^>/ {if (seqlen){print seqlen}; print ;seqlen=0;next; } { seqlen = seqlen +length($0)}END{print seqlen}' Stickleback_genome.chr.fa
+
+#unmask fasta files
+sed '/[>*]/!s/[atgcn]/\u&/g' test.fa
+
+# hard-mask soft-masked fasta
+sed '/[>*]/!s/[atgcn]/N/g' test.fa
+
+# add '0' before one digit-chr seq-names
+sed 's/>chr\(.\)$/>chr0\1 /' all_hypoLG2nd.fasta
+
+# filter fasta for min seqlength
+  samtools faidx oneline_allHypo_bt.fasta
+  awk '{if($2 > 500) print $1 "\t0\t" $2 "\t" $1}' oneline_allHypo_bt.fasta.fai > selectSeq.bed
+  /software/bedtools2/bin/fastaFromBed -fi oneline_allHypo_bt.fasta -bed selectSeq.bed -name -fo  selectSeq150_HP.fasta
+
+###-------------------- fastQ handling -----------------------###
+#---------------------------------------------------------------#
+# subsample gziped fastq file
+reformat.sh in1=reads1.fq.gz in2=reads2.fq.gz out=sampled1.fq.gz out2=sample2.fq.gz samplereadstarget=100000000
+
+# get fastq sizes
+awk '{if(NR%4==2) print length($1)}' PR_product_merged.fq | sort -n | uniq -c > read_length.txt
+
+#append to fastq seq_IDs for as fq-files in dir
+for i in *.fq; do sed '1~4!n;s/^@\(.*\)/@_'$i'_\1/' $i >> `basename $i .fq`.ren.fq ; done
+
+#fastq -> fasta
+gunzip -c file.fq.gz | paste - - - - | cut -f 1,2 | sed 's/^/>/' | tr "\t" "\n" > file.fa
+
+###-------------------- maf handling -----------------------###
+#-------------------------------------------------------------#
+#kick out sequence
+awk 'NF{NF-=1};1' allmaps_comp.maf > reduced_maf_comp.csv
+
+#complete maf ==> links (circos)
+
+1) awk 'NF{NF-=1};1' ~/mnt/mount2/assembly_ver2.0/13_sizeSelect/renaming/mafFiltered2000_v2_01_to_GA.maf |sed 1,20d  |sed '/^$/d' |sed '/^a/d' |awk '{print $2,"\t",$3,"\t",$3+$4 }' |paste - -  > links.txt
+2) sed 's/LG/hp/g' reduced_maf2000.txt |sed 's/chrI /ga01 /g; s/chrII /ga02 /g; s/chrIII /ga03 /g; s/chrIV /ga04 /g; s/chrV /ga05 /g; s/chrVI /ga06 /g; s/chrVII /ga07 /g; s/chrVIII /ga08 /g; s/chrIX /ga09 /g; s/chrX /ga10 /g; s/chrXI /ga11 /g; s/chrXII /ga12 /g; s/chrXIII /ga13 /g; s/chrXIV /ga14 /g; s/chrXV /ga15 /g; s/chrXVI /ga16 /g; s/chrXVII /ga17 /g; s/chrXVIII /ga18 /g; s/chrXIX /ga19 /g; s/chrXX /ga20 /g; s/chrXXI /ga21 /g; s/chrM /gaM /g' |sed '/^Contig/d' > links_hp-ga2000.txt
+
+#remove header (20 lines)
+sed 1,20d reduced_maf300_Fugu.csv > reducedFugu1.txt
+
+###-------------------- sam handling -----------------------###
+#-------------------------------------------------------------#
+
+# sort sam (only mapped - unmapped = -f, bam: add -b )
+samtools view -F 4 foo.sam > fooMapped.sam 
+
+# samtools -filter for mapping quality:
+samtools view -b -q 10 foo.bam > foo.filtered.bam
+
+#sam>bam (header there)
+samtools view -bS test.sam > test.bam
+
+#directly into sorted bam:----------------------
+samtools view -bS file.sam | samtools sort - file_sorted
+
+#sort bam
+samtools sort test.bam test_sorted
+
+#index bam file
+samtools index test_sorted.bam
+
+###--------------- bits and pieces -------------------###
+#-------------------------------------------------------#
+
+#reformat vcftools HWE output for R input
+cat SPEC_batch_3.hwe | tr '/' '\t' > SPEC_batch_3.hwe_t
+
+
+# setup PB_Jelly
+source /sfs/fs3/work-geomar7/smomw262/Kosmas_temporary/software/PBSuite/setup.sh
+
+
+# get first and las tcolumn from GC report
+awk '{print $1,"\t",$NF}' GC_stats_v2_AM01.txt
+
+#latex_pfad anzeigen
+kpsepath tex | tr : '\n'
+
+# convert all svg in path to pdf
+for i in *.svg; do inkscape -z -C -f $i -A $i.pdf; done
+
+# CHECK ----- PYTHON MODULES
+import pip
+installed_packages = pip.get_installed_distributions()
+installed_packages_list = sorted(["%s==%s" % (i.key, i.version)
+     for i in installed_packages])
+print(installed_packages_list)
+
+# switch perl versions
+perlbrew switch perl-5.16.0 # or(5.25.0t)
+
+#set Java paths
+export JAVA_HOME=$HOME/jdk1.8.0_101/
+export PATH=$HOME/jdk1.8.0_101/bin:$PATH
+
+#make install without sudo rights by providing another install location
+
+./configure PREFIX=~/software/<tool_directory>
