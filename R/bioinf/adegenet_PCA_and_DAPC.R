@@ -1,5 +1,4 @@
 ###Call libs###
-
 library(dplyr)
 library(adegenet)
 library(pegas)
@@ -16,7 +15,9 @@ pops <- c(rep("Miami",15), rep("Sylt",16), rep("Varna",16), rep("Villefranche",9
 genlight <- vcfR2genlight(read.vcfR("/Users/Moritz/NEC_WORK/variants/merged/master_snps_ss_GQ13_90pCall_maf5p.vcf.gz"))
 pop(genlight) <- pops
 
+##########################################################
 ##############PRINCIPAL COMPONENT ANALYSIS################
+##########################################################
 
 ###Calculate PCA###
 
@@ -63,7 +64,43 @@ loadingplot(pca1$loadings, axis=2)
 plot(-log(abs(pca1$loadings[,"Axis1"]))) #thr=quantile(pca1$loadings[,"Axis1"],0.9999, type=8))
 #axis determines which DF should be analyzed. thr is used to determine whether labelling should take place, here 99.9% percentile.
 
+################################################################
 #######DISCRIMINANT ANALYSIS OF PRINCIPAL COMPONENTS############
+################################################################
+#If you havent run a PCA before you need to prepare a genlight object!!
+#Skip this if you have one already
+
+####PREPARATION OF GENLIGHT OBJECT#########
+
+###Read VCF, convert to genlight and append pop data###
+
+genlight <- vcfR2genlight(read.vcfR("/Users/Moritz/Fuse_vols/SCRATCH/SF16_GBS/Results/r_Q30_DP5_bial_hwe_CR90.vcf"))
+pop(genlight) <- pops
+
+save(genlight, file="r_Q30_DP5_bial_hwe_CR90.genlight")
+
+#Alternatively if you have previously saved the genlight object
+
+load(file="r_Q30_DP5_bial_hwe_CR90.genlight")
+
+#if you need to subset your genlight object you can
+
+fall_gl <- genlight[grep("*FT*",indNames(genlight))]
+pop(fall_gl) <- c(rep("Basin",26), rep("Pond",81))
+spring_gl <- genlight[grep("*SU*",indNames(genlight))]
+pop(spring_gl) <- c(rep("Basin",25), rep("Pond",61))
+
+#####Calculate PCA for use with DAPC#####
+
+#nf determines the number of PCs to be retained. Ideally you want enough to explain most of the variation in as few PCs as possible but since you will not display >5-6 dimensions it is ok to go lower.
+#BUT: if you want to use the results of this PCA later on in the DAPC, go for a high number of dims (>N) to not be limited later
+spring_glpca <- glPca(spring_gl, nf=85, n.cores = 3, parallel = require("parallel"), useC=F)
+
+#save(glpca, file="r_Q30_DP5_bial_hwe_CR90.glpca")
+
+load(file="r_Q30_DP5_bial_hwe_CR90.glpca")
+
+#####Run the DAPC
 
 #First identify the most likely number of clusters.
 
