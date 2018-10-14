@@ -1,0 +1,33 @@
+#!/bin/bash
+
+#Job Name
+#BSUB -J blank
+
+#Queue
+#BSUB -q general
+
+#Cores
+#BSUB -n 15
+
+#RAM per core (MB)
+#BSUB -R "rusage[mem=1500]"
+
+#Makes sure all cores are on the same node
+#BSUB -R "span[hosts=1]"
+
+#Walltime (Optional)
+#BSUB -W 24:00
+
+#Project
+#BSUB -P fun_gen_1
+
+#Output File (Absolute path! Can use job name variable)
+#BSUB -o /nethome/mae120/logs/blank.out
+
+###################################################################
+
+#Change to your working directory
+cd $SCR/mydirectory
+
+
+###YOUR SCRIPT HERE###

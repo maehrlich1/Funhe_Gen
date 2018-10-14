@@ -19,7 +19,7 @@ twoggcols <- c("#F8766D","#00BFC4")
 #will readily throw out these values. VERY CONSERVATIVE!
 
 #create vector of your permutation sets
-comp <- c("BaSU_vs_BaFT","P1SU_vs_P1FT","P2SU_vs_P2FT","P3SU_vs_P3FT", "BaSU_vs_PondSU", "BaFT_vs_PondFT")
+comp <- c("BaSU_vs_BaFT","P1SU_vs_P1FT","P2SU_vs_P2FT","P3SU_vs_P3FT")
 
 #create list to store data and for outliers
 stat <-list()
@@ -31,13 +31,13 @@ outliers <- list()
 #Read in the pvalues from the permutation analysis
 for(i in comp) {
   
-  stat[[i]] <- read.delim(paste("/Users/Moritz/Fuse_vols/SCRATCH/SF16_GBS/perm/", i, "/pvalues.tsv", sep=""), header=F, col.names = c("Chrom","Position","Fst","p_val"))
+  #stat[[i]] <- read.delim(paste("/Users/Moritz/Fuse_vols/SCRATCH/SF16_GBS/perm/", i, "/pval/master.pval", sep=""), header=T)
 
-  stat[[i]] <- mutate(stat[[i]], ID=paste(Chrom,Position,sep="_"))
+  #stat[[i]] <- mutate(stat[[i]], ID=paste(CHROM,Pos,sep="_"))
   
-  #stat[[i]] <- mutate(stat[[i]], q_val=qvalue(stat[[i]]$p_val)$qvalues)
+  stat[[i]] <- mutate(stat[[i]], q_val=qvalue(stat[[i]]$p_val, lambda=0)$qvalues) #the lambda dictates that BH correction is used
   
-  outliers[[i]] <- filter(stat[[i]], p_val<=0.001)
+  outliers[[i]] <- filter(stat[[i]], q_val<=0.05)
   
 }
 
@@ -57,31 +57,57 @@ venn_bp <- lapply(outliers[c(5:6)],function (x) as.vector(x$ID))
 
 venn_overlap <- list("Basin vs. Ponds - Spring" = subset(bp_outliers, Season=="Spring")$ID, "Basin vs. Ponds - Fall" = subset(bp_outliers, Season=="Fall")$ID, "Allele frequency shifted"=sf_outliers$ID)
 
-
-
 venn.diagram(venn_overlap, filename = "venn_overlap.png", fill=c(threeggcols[2],threeggcols[3],threeggcols[1]), col=NA, alpha=0.5, height=1800, width=1800, cat.pos=c(340,20,180), cat.dist=c(.07,.07,.05), margin=.1)
 
 
 
 #Make a plot of Fst vs p-value. First make a dataframe from the list
 
-sf_stat <- bind_rows("Basin"=stat[[1]], "Pond1"=stat[[2]], "Pond2"=stat[[3]], "Pond3"=stat[[4]], .id="Habitat")
-sf_stat$Habitat <- as.factor(sf_stat$Habitat)
+sf_stat <- bind_rows("Basin"=stat[[1]], "Pond1"=stat[[2]], "Pond2"=stat[[3]], "Pond3"=stat[[4]], .id="Microhabitat")
+sf_stat$Microhabitat <- as.factor(sf_stat$Microhabitat)
 
-png("quad_losi_sf.png", width = 1600, height = 2400, res = 300)
+png("fst_pval_SF_allhabs.png", width = 2400, height = 1800, res = 300)
 
 ggplot(sf_stat)+
-  geom_point(aes(x=Fst, y=-log10(p_val)), alpha=0.8)+
-  geom_point(data=subset(sf_stat, p_val<=0.001), aes(x=Fst, y=-log10(p_val)), col=twoggcols[2], alpha=0.8)+
-  geom_hline(yintercept = -log10(0.001), col=twoggcols[2])+
+  geom_point(aes(x=Fst, y=-log10(p_val)), alpha=0.6)+
+  geom_point(data=subset(sf_stat, p_val<=0.05/28000), aes(x=Fst, y=-log10(p_val)), col=twoggcols[1], alpha=0.8)+
+  geom_hline(yintercept = -log10(0.05/28000), col=twoggcols[1])+
   labs(y=expression("-log("*italic(p)~value*")"), x=expression(italic(F[ST])))+
   theme_bw()+
   theme(text = element_text(size=18))+
-  facet_wrap(~Habitat, ncol=2)
+  facet_wrap(~Microhabitat, ncol=2)
+
+dev.off()
+
+#Can also plot q-values
+
+png("fst_qval_SF _allhabs.png", width = 2400, height = 1800, res = 300)
+
+ggplot(sf_stat)+
+  geom_point(aes(x=Fst, y=-log10(q_val)), alpha=0.6)+
+  geom_point(data=subset(sf_stat, q_val<=0.05), aes(x=Fst, y=-log10(q_val)), col=twoggcols[2], alpha=0.8)+
+  geom_hline(yintercept = -log10(0.05), col=twoggcols[2])+
+  labs(y=expression("-log("*italic(q)~value*")"), x=expression(italic(F[ST])))+
+  theme_bw()+
+  theme(text = element_text(size=18))+
+  facet_wrap(~Microhabitat, ncol=2)
 
 dev.off()
 
 
+#Finally a LOSITAN style plot using the He values
+
+png("he_fst_SF_allhabs.png", width = 2400, height = 1800, res = 300)
+
+ggplot(sf_stat)+
+  geom_point(aes(x=He, y=Fst), alpha=0.6)+
+  geom_point(data=subset(sf_stat, q_val<=0.05), aes(x=He, y=Fst), col=twoggcols[2], alpha=0.8)+
+  labs(y=expression(italic(F[ST])), x=expression(italic(H[E])))+
+  theme_bw()+
+  theme(text = element_text(size=18))+
+  facet_wrap(~Microhabitat, ncol=2)
+
+dev.off()
 
 
 

@@ -136,6 +136,9 @@ awk 'NR>1 {print $3}' fc6_cov | awk '{sum+=$0} NR%1000==0 {print NR"\t"sum/1000;
 # give total length of genome
 	tail -n 1 glob_coord.txt | awk '{print $2+$3-1}'
 
+# calculate expected het using the vcftools --freq2 output
+	awk -v OFS='\t' 'NR==1 {print $1,$2,$3,$4,"FreqA","FreqB","HE"}; NR>1 {print $0,2*$5*$6}' foo.frq > foo.hexp
+
 ###-------------------- fastA handling -----------------------###
 #---------------------------------------------------------------#
 # splittin a fasq file:
