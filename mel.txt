@@ -1,6 +1,2 @@
-<<<<<<< HEAD
 save this fast
-=======
 hi
-
->>>>>>> 076c3788721439cc43c63c395099e857e0cce25c
