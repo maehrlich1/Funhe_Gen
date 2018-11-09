@@ -109,6 +109,9 @@ shopt -s extglob
 
 ###-------------------- textfile handling --------------------###
 #---------------------------------------------------------------#
+#find and replacing string in multiple files, creating new files
+for i in *foo.job; do sed 's/foo/bar/g' $i > ${i//foo/bar}; done
+
 # extracting lines from file
 sed -n '2,3p' test1.txt > test2.txt
 
