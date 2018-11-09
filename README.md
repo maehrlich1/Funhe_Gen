@@ -1,2 +1,2 @@
-# MAE_Gen
-MAE repository for Fundulus genomics.
+# Funhe_Gen
+Repository for Fundulus genomics scripts and general data wrangling.
