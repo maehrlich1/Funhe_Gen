@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+if [[ $# -eq 0 ]] ; then
+    echo 'usage: firegen find_string replace_string find_filename replace_filename INPUT_FILES'
+    exit 0
+fi
+
+FIND_STRING=$1
+REPLACE_STRING=$2
+FIND_FILENAME=$3
+REPLACE_FILENAME=$4
+shift 4
+FILES=$@
+
+for i in $FILES
+do
+	NEWNAME=${i/"$FIND_FILENAME"/"$REPLACE_FILENAME"}
+	sed "s/$FIND_STRING/$REPLACE_STRING/g" $i > $NEWNAME
+done
