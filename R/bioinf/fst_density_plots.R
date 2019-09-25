@@ -9,8 +9,11 @@ setwd("/Users/Moritz/Documents/Academic/RSMAS/PhD/SF16_GBS/Plots/")
 #bp_pops <- c(rep("Basin",51), rep("Pond",142))
 #sf_pops <- c(rep("Fall",26), rep("Spring",25), rep("Fall",27), rep("Spring",19), rep("Fall",30), rep("Spring",19), rep("Fall",24), rep("Spring",23))
 #myPng <- function(..., width=6, height=6, res=300, ps=12) {png(..., width=width*res, height=height*res, res=res, pointsize=ps)}
-threeggcols <- c("#F8766D","#00BA38","#619CFF")
-twoggcols <- c("#F8766D","#00BFC4")
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+cols=gg_color_hue(4)
 
 #create vector of fst sets
 comp <- c("BaSUvsBaFT","P1SUvsP1FT","P2SUvsP2FT","P3SUvsP3FT")
@@ -41,15 +44,18 @@ fst_df$Habitat <- as.factor(fst_df$Habitat)
 
 #make density graphs
 
-png("emp_fst_SF_allhabs.png", width = 2400, height = 1800, res = 300)
+png("sf_fst_histogram_zoom_basin.png", width = 2400, height = 1600, res = 300)
 
-ggplot(fst_df)+
-  geom_density(aes(x=WEIR_AND_COCKERHAM_FST, col=Habitat), alpha=0.8)+
+ggplot(subset(fst_df, WEIR_AND_COCKERHAM_FST>0.25 & Habitat=="Basin"))+
+  #geom_density(aes(x=WEIR_AND_COCKERHAM_FST, col=Habitat), alpha=0.8)+
+  geom_histogram(aes(x=WEIR_AND_COCKERHAM_FST), fill=cols[1], bins=50, alpha=0.9)+
   #geom_point(data=subset(sf_stat, p_val<=0.001), aes(x=Fst, y=-log10(p_val)), col=twoggcols[2], alpha=0.8)+
   geom_vline(xintercept = 0, lty="twodash", alpha=0.8)+
-  labs(y="Density", x=expression(italic(F[ST])))+
+  #facet_wrap(~Habitat)+
+  labs(y="Count", x=expression(italic(F[ST])))+
+  coord_cartesian(x=c(0.25,0.5), y=c(0,20))+
   theme_bw()+
-  theme(legend.position = c(.8,.8), text = element_text(size=18))
-
+  scale_fill_discrete(guide=F)+
+  theme(legend.position = c(.8,.8), text = element_text(size=24), axis.title.x = element_blank())
 
 dev.off()

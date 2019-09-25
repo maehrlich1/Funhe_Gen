@@ -49,14 +49,14 @@ qcat -e JOBID (also -o)
 screen -ls
 
 # open new session
-screen -S SESSIONNAME
+screen -S SessionNameHere
 	-> # leave session (still running)
 	press "ctrl+a" then "ctrl+d"
 	-> # quit session (from within)
 	exit 
 
 # reattach to session
-screen -d -r SESSIONNAME
+screen -d -r SessionNameHere
 
 #if process already started
 put into bg then:

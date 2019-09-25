@@ -1,0 +1,316 @@
+---
+title: "WAM Analysis Pipeline - for sharing"
+author: "Melissa Drown"
+date: "4/4/2019"
+output: html_document
+---
+
+```{r setup}
+library(ggplot2)
+library(data.table)
+library(dplyr)
+library(tidyverse)
+```
+
+The block below will set variables for the rest of the script. The values assigned to these variables are dependent on the water temperature and salinity of the run because oxygen availability changes in water dependent on these parameters.
+
+```{r variables}
+# alpha = saturation of O2 in mg/L for a specific temperature and salinity
+# 6.73 for 28 degreesC or 10.74 for 12 degreesC
+alpha=6.73
+
+# beta = conversion factor for going from umol to kPa oxygen 
+#(NEEDED FOR FINAL CALCULATION OF MO2)
+beta=0.073
+
+# gamma = saturation of O2 in umol/L for a specific temperature and salinity
+# 244.1 for 28 degC or 355.7 for 12 degC
+gamma=244.1
+
+# chamber_vol = volume of one WAM glass chamber in Liters
+chamber_vol=0.2983
+
+# end_time = time in %H:%M:%S that the run should stop at
+# end_time is used to define the data points we cut from the file before analysis
+end_time = "06:30:00"
+
+# interval_mins = number of minutes in one replicate interval
+# interval_mins = 6 minutes for 28C and 12 minutes for 12C
+interval_mins = 6 
+
+# num_sensors = number of sensors used in the run, max value of 10
+num_sensors = 10
+
+# interval = total number of lines in one interval including data points from all sensors
+#should be 1200 lines for 28C and 2400 lines for 12C if all ten sensors were used and the normal interval_mins were used
+interval=interval_mins*num_sensors*20 
+
+# Background respiration correction
+# ?? for 12C and for ?? 28C
+background <- 0
+background_corrected <- 0
+  
+```
+
+Read in the files from presens software. This should include the file from the run overnight along with ONE of the following: 
+1) a "flush file"" where chambers were oscillating every 30 seconds and continously flushing so there is no slope
+2) a "blank file"" where chambers were oscillating every 6 or 12 minutes and there is a slope with no fish in the chambers
+3) a run file that included a 6 hour flush period before the real data collection began, this can be read in as a substitute for the "flush file" described in #1 above
+
+1, 2, or 3 will be used to correct for variation in sensors later in the script.
+Using the fread() function allows us to read in specific columns rather than the entire file. 
+
+```{r files}
+# Read in the run file from that day including columns: 2) Time, 3) Channel, 6) Sensor_Name, 7) delta_t (change in time in minutes), 9) Value (oxygen value in umol/L)
+# the run file for the day
+data <- fread("2019May30_WAM_O2.csv", select=c(2,3,6,7,9)) 
+
+# Make a fish file with the columns listed below. This data can be pulled from the WAM notebook or the master google drive file. 
+#Chamber (number), Chamber position (a for even chambers, b for odd chambers), Fish ID, sex, population, Channel (same as Chamber number), length, mass, mass_kg, alpha (0.472 for 12 deg, 0.35 for 28 deg), Date, Temp, Weekday
+fish <- read.csv("fishMay30.csv")
+
+########################################################
+# ONE OF THE FOLLOWING 
+# if there is a flush file for the day 
+flush <- fread("2019May30_flush_WAM_O2.csv",select=c(2,3,6,7,9))
+
+# if there is a blank file for the day
+blank <- fread("2019May30_blank_WAM_O2.csv",select=c(2,3,6,7,9))
+
+# if there is a 6 hour flush at the start of the run and no blank file
+flush <- data[1:360*20*num_sensors,] 
+
+```
+
+Now that we have the files we want to remove any data that was recorded while the lights were on in the room because this may alter the behavior of the fish. We are looking to calculate a value as close as possible to minimum metabolic rate, which should occur at night when the fish are at rest. 
+
+Use as.POSIXct and strptime to convert the Time column of the data file to a format that R recognizes as time of day.
+Then use the subset function to keep only data that was recorded before the specified end_time from the beginning of this script. This should keep all data from midnight until the end_time. 
+
+Within the subset function use Sys.Date() to print today's date and add it to the time of day so we are filtering within a single day to take only data after midnight. 
+
+head and tail will print the first and last 6 lines of the data file so we can check that the filter worked. 
+
+```{r time of day filter}
+# convert format of the Time column from a character to a time of day
+data$Time <- as.POSIXct(strptime(data$Time, format="%H:%M:%S"))
+
+# filter by time of day
+data <- subset(data, data$Time <= paste(Sys.Date(), end_time, sep=" "))
+head(data)
+tail(data)
+```
+
+This for loop will print one ggplot object for each Channel of the oxygen meter that recorded data. The graph will show time in minutes on the x-axis and oxygen value in umol/L on the y-axis. Using coord_cartesian() we can zoom in on differnt parts of the x or y axis to check out the data. 
+
+The data should start between ~300-400 minutes and end between ~700-800 minutes in most cases after using the Time filter. 
+
+```{r graph}
+for (i in sort(unique(data$Channel))){
+ print(ggplot(data=subset(data, data$Channel==i),aes(x=delta_t, y=Value)) + 
+    geom_point() + ggtitle(i)
+  + coord_cartesian(x=c(360,370)))
+}
+
+```
+
+By cutting at Time of day we might have taken only parts of the first and last slope in the remaining data. This will mess up the analysis because we won't have a full interval of data to look at for those slopes. 
+
+To solve this issue we want to find the start of the first full interval and the end of the last full interval at either end of the data file. 
+
+Using which.max we can find the line number of the maximum value of oxygen within one interval of the start of the file and delete all data points before that because they are not part of a complete slope.
+
+Using floor we can determine how many complete intervals (num_cycles) are left in the data file and delete all data points that remain at the end. 
+
+```{r cuts}
+# Find the first cut point based on local maximum oxygen value within the first interval
+cut_start <- data$delta_t[which.max(head(data, n=1*interval)$Value)]
+
+# Cutting the beginning of the file
+data <- subset(data, data$delta_t >= cut_start)
+
+# Define number of cycles
+num_cycles <- floor(nrow(data)/interval)
+
+# Cutting the end of the file
+data <- head(data,n=interval*num_cycles)
+```
+
+Use the same for loop as above to plot oxygen over time as a function of channel number. The first for loop will plot the first 50 minutes from cut_start (defined in the previous block). The second for loop will plot the last 50 minutes of data and should end at completion of the final interval. 
+
+```{r graph_2}
+# Plot of the start of the data from the first cut point for 50 minutes
+for (i in sort(unique(data$Channel))){
+ print(ggplot(data=subset(data, data$Channel==i),aes(x=delta_t, y=Value)) + 
+    geom_point() + ggtitle(i)
+  + coord_cartesian(x=c(cut_start,cut_start+50)))
+}
+
+# Plot of the end of the data from the last cut point back 50 minutes
+for (i in sort(unique(data$Channel))){
+ print(ggplot(data=subset(data, data$Channel==i),aes(x=delta_t, y=Value)) + 
+    geom_point() + ggtitle(i)
+  + coord_cartesian(x=c((cut_start+(interval_mins*num_cycles))-50,
+                         cut_start+(interval_mins*num_cycles))))
+}
+```
+
+Add replicate number. Note, even chambers are measured first, odd chambers second. Therefore, odd numbered replicates are even numbered chambers, and even numbered replicates are odd numbered chambers. 
+
+```{r replicate}
+# Use mutate to generate a new column containing intervals 1:total number of intervals
+data <- data %>%
+  mutate(Replicate=rep(1:num_cycles, each=interval))
+```
+
+Now we have only data from when the lights were off in the room and we have no partial cycles. We still have data points that were recorded between slopes that show the transition between one chamber and another. These data points should NOT be included in the final slope calculation and need to be removed. 
+
+Define del1 and del2 as the number of points to be deleted at the start and end of each slope and define keep as the remainder of data points from the slope to be kept for analysis. 
+
+Use mutate to create a new column with the word "delete" or "keep" depending on the defined del1, del2, and keep variables. Subset the data to include only data points that have been marked in the Measure_Type column to "keep. "
+
+```{r slope_sectioning}
+# Cut in between each replicate to delete junk data
+del1 = 0.1*(interval/num_sensors)
+del2 = 0.2*(interval/num_sensors)
+keep = (interval/num_sensors)-del1-del2
+
+data <- data %>% group_by(Sensor_Name, Replicate) %>%
+  mutate(Measure_Type=rep(c("delete", "keep", "delete"), times=c(del1, keep, del2)))
+
+data <- subset(data, data$Measure_Type=="keep")
+
+```
+
+Use the same for loop to view the start and end of the file to determine how the deletions worked. There should now be only clearly defined negative slopes with no curved ends and no straggling data points in between them. 
+
+```{r graph3}
+# the beginning
+for (i in sort(unique(data$Channel))){
+ print(ggplot(data=subset(data, data$Channel==i),aes(x=delta_t, y=Value)) + 
+    geom_point() + ggtitle(i)
+ + coord_cartesian(x=c(cut_start,cut_start+50)))
+}
+
+# the end
+for (i in sort(unique(data$Channel))){
+ print(ggplot(data=subset(data, data$Channel==i),aes(x=delta_t, y=Value)) + 
+    geom_point() + ggtitle(i)
+  + coord_cartesian(x=c((cut_start+(interval_mins*num_cycles))-50,
+                         cut_start+(interval_mins*num_cycles))))
+}
+```
+
+The data cutting is done!
+
+We still have a few more analysis steps though. The data we have is using different sensors to measure different individuals and there may be variation due to sensor and not individual that are being confounded.
+
+If you have a "flush file" OR a "flush" from the first 6 hours of the file use block 1 if you have a "blank file" use block 2 below. 
+
+```{r flush_correction}
+### BLOCK ONE
+###########################################
+#Use only if you have a "flush file" or a "flush" from the first 6 hours of your file.
+# STOP if you have a "blank" file and go to the next block without running this one. 
+###########################################
+
+# use a ratio of the max oxygen value/mean flush value to correct for variation in sensor. 
+# The mean flush value will be different depending on how the sensor read the oxygen level in an empty chamber during a blank run prior to adding fish for the night. 
+
+# determine the highest oxygen values in the file (99th percentile)
+max_flush <- flush %>% group_by(Channel) %>%
+  summarise(high_perc=quantile(Value, 0.99))
+
+# correct for variation in sensor
+data <- data %>%
+  full_join(max_flush, by="Channel") %>%
+  mutate(O2_corrected=Value*gamma/high_perc)
+```
+
+```{r blank_correction}
+### BLOCK TWO
+###########################################
+### Use only if you have a "blank" file.
+# STOP if you have a "flush" file! Make sure you have run the previous block and skip this block!
+###########################################
+
+# determine the highest oxygen values in the file (99th percentile)
+max_blank <- blank %>% group_by(Channel) %>%
+  summarise(high_perc=quantile(Value, 0.99))
+
+# correct for variation in sensor
+data <- data %>%
+  full_join(max_blank, by="Channel") %>%
+  mutate(O2_corrected=Value*gamma/high_perc)
+```
+
+```{r slopes}
+# Calculate corrected and uncorrected slopes
+slopes <- data %>%
+  group_by(Channel, Replicate) %>%
+  do(fitSlope = abs(lm(O2_corrected ~ delta_t, data = .)$coefficients[2]),
+     r_squared = summary(lm(O2_corrected ~ delta_t, data = .))$r.squared)
+
+slopes$fitSlope <- as.numeric(slopes$fitSlope)
+slopes$r_squared <- as.numeric(slopes$r_squared)
+
+summary(slopes)
+```
+
+Use the calculated R2 values to filter out any slopes that have an R2 lower than 0.9 as they are poorly fitted. 
+
+```{r filter_slopes}
+slopes <- subset(slopes, slopes$r_squared >= 0.9)
+```
+
+```{r fishmerge}
+# merge the slope data with the fish data. Make sure your fish file has columns that will match the slopes data frame that was just generated so that the merge will work. 
+# This is also the step where Replicates are split to their appropriate chamber. 
+
+slopes <- slopes %>% mutate(Chamber_pos=ifelse(Replicate %% 2 == 0, "a","b")) 
+slopes$Chamber_pos <- as.factor(slopes$Chamber_pos)
+
+MO2 <- full_join(fish, slopes, by=c("Channel", "Chamber_pos"))
+```
+
+```{r MO2}
+# Calculate metabolic rate from corrected and uncorrected slopes and look at it. Larger fish should have a higher MO2, MO2_mg_hr & corrected should be betweeen ~1 and ~5 
+MO2 <- MO2 %>%
+  mutate(MO2_mg_hr=sqrt((fitSlope-background)*60*beta*alpha*(chamber_vol-mass_kg)),
+         MO2_mg_hr_kg=MO2_mg_hr/mass_kg)
+
+# save the fifth and tenth percentile (lower tail) values for each 
+MO2 <- MO2 %>% group_by(FishID) %>%
+  mutate(fifth_perc_MO2_mg_hr=quantile(MO2_mg_hr, 0.05),
+         fifth_perc_MO2_mg_hr_kg=quantile(MO2_mg_hr_kg, 0.05),
+         tenth_perc_MO2_mg_hr=quantile(MO2_mg_hr, 0.10),
+         tenth_perc_MO2_mg_hr_kg=quantile(MO2_mg_hr_kg, 0.10))
+
+MO2_flat <- MO2 %>% group_by(FishID) %>%
+  summarise(fifth_perc_MO2_mg_hr = fifth_perc_MO2_mg_hr,
+            fifth_perc_MO2_mg_hr_kg = fifth_perc_MO2_mg_hr_kg,
+            tenth_perc_MO2_mg_hr = tenth_perc_MO2_mg_hr,
+            tenth_perc_MO2_mg_hr_kg = tenth_perc_MO2_mg_hr_kg)
+```
+
+```{r graphs}
+# There are some general graphics that can help for a quick summary. (Non-essential code)
+MO2$Sensor_Name <- as.factor(MO2$Channel)
+
+ggplot(MO2, aes(FishID)) + 
+  geom_boxplot(aes(y = MO2_mg_hr, colour = "MO2_mg_hr")) + 
+  geom_boxplot(aes(y = fifth_perc_MO2_mg_hr, colour = "fifth_perc_MO2_mg_hr")) + 
+  geom_boxplot(aes(y = tenth_perc_MO2_mg_hr, colour = "tenth_perc_MO2_mg_hr"))
+
+ggplot(MO2) + 
+  geom_density(aes(x = fifth_perc_MO2_mg_hr, colour = "fifth_perc_MO2_mg_hr")) + 
+  geom_density(aes(x = tenth_perc_MO2_mg_hr, colour = "tenth_perc_MO2_mg_hr"))
+
+```
+```{r save}
+# download the file as a .csv
+# flat file without replicates
+write.csv(MO2_flat, "2019May30_WAM_analyzed_flat.csv")
+# including all replicates
+write.csv(MO2, "2019May30_WAM_analyzed.csv")
+```

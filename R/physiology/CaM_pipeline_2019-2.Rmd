@@ -1,0 +1,154 @@
+---
+title: "CaM Analysis Pipeline"
+author: "Amanda DeLiberto"
+date: "06/12/2019"
+output: html_document
+---
+
+```{r setup}
+library(ggplot2)
+library(data.table)
+library(dplyr)
+library(tidyverse)
+
+```
+
+```{r files}
+# read in the PreSens files and subset by chamber ID
+#read in the fish file - formatting is very important! Use the template
+data <- fread("O2_file.csv",select=c(3,6,7,9)) 
+fish <- fread("fish_file.csv")
+fish$cycle <- as.factor(fish$cycle)
+summary(fish)
+## Visualize file
+ggplot(data=data, aes(x=delta_t, y=Value, col = Sensor_Name)) + geom_point() #+ coord_cartesian(y=c(280,380), x=c(100,150))
+```
+
+
+```{r variables}
+cyclelength=240 #cycle length in lines
+volume = c(950,950,1250,1150)
+```
+
+```{r}
+cutpoints <- vector('numeric')
+cutdata <- data[241:480,]
+
+for(n in 1:(nrow(data)-1)){
+  if(data$delta_t[n+1] - data$delta_t[n] <= 1.0) next
+  cutpoints <- c(cutpoints,n)
+  cutdata <- rbind(cutdata, data[(n+241):(n+480),])
+  }
+#Check that cutpoints for the file make sense
+cutpoints
+```
+
+```{r cycle number}
+# Add cycle number. This allows each cycle to be matched up with its corresponding fish and substrate
+cutdata <- cutdata %>%
+  mutate(cycle=rep(1:ceiling(nrow(cutdata)/cyclelength), each=cyclelength))
+summary(cutdata)
+cutdata$cycle <- as.factor(cutdata$cycle)
+#Check the data to make sure cycle number was assigned correctly
+ggplot(data=cutdata, aes(x=delta_t, y=Value, col = cycle)) + geom_point()
+```
+
+
+```{r deleting problematic data points}
+#Are there any points that are two high because the sensor wasn't in the right orientation? Judgement call, but you may want to remove these as they'll affect the slopes. Use summary to check and the next line to delete them
+summary(cutdata$Value <= 400)
+cutdata <- cutdata[cutdata$Value<=400,]
+ggplot(data=cutdata, aes(x=delta_t, y=Value, col = Sensor_Name)) + geom_point()
+
+```
+
+```{r slope calculation}
+#Calculate the slope of the 3 min measurement
+slope <- cutdata %>%
+  group_by(Sensor_Name, cycle) %>%
+  do(slope = -(lm(Value ~ delta_t, data = .)$coefficients[2]),
+     slopeR2 = summary(lm(Value ~ delta_t, data = .))$r.squared)
+slope$slope <- as.numeric(slope$slope)
+
+#Merge it with the fish file by Sensor Name and cycle number --- it's very important to use the fish template provided
+data_all <- full_join(slope, fish, by=c("Sensor_Name", "cycle"))
+```
+
+```{r remove leak/background resp}
+#This calculates the average background respiration or leak in each chamber during the run
+blanks <- subset(data_all, data_all$fish_ID == "blank")
+blank_val = tapply(blanks$slope, blanks$Sensor_Name, mean)
+blank_val
+
+#remove blanks from datasheet
+#data_all = subset(data_all, data_all$fish_ID != "blank")
+
+#Correct for background respiration/leak and then by chamber volume and change to pmol/s
+#(O2 value - avg blank value)*chamber volume /60 sec/min
+data_all <- data_all %>% 
+  mutate(MR_pmol_s=NA) %>%
+  mutate(MR_pmol_s=ifelse(Sensor_Name=="CaMO1", (slope-blank_val[1])*volume[1]/60,MR_pmol_s))%>%
+  mutate(MR_pmol_s=ifelse(Sensor_Name=="CaMO2", (slope-blank_val[2])*volume[2]/60,MR_pmol_s))%>%
+  mutate(MR_pmol_s=ifelse(Sensor_Name=="CaMO3", (slope-blank_val[3])*volume[3]/60,MR_pmol_s))%>%
+  mutate(MR_pmol_s=ifelse(Sensor_Name=="CaMO4", (slope-blank_val[4])*volume[4]/60,MR_pmol_s))
+ 
+```
+
+```{r subset by substrate}
+glucose <- subset(data_all, data_all$substrate == "Glucose")
+fa <- subset(data_all, data_all$substrate == "FA")
+lka <- subset(data_all, data_all$substrate == "LKA")
+inh <- subset(data_all, data_all$substrate == "INH")
+```
+
+
+```{r plots}
+data_all$fish_order <- as.factor(data_all$fish_order)
+data_all$cycle <- as.factor(data_all$cycle)
+
+#Look at the substrate by fish
+ggplot(data_all, aes(fish_ID)) + 
+  geom_point(aes(y = data_all$MR_pmol_s, col = substrate))
+
+#Check that there's no replicate effect
+ggplot(data_all, aes(cycle)) + 
+  geom_point(aes(y = data_all$MR_pmol_s, col = substrate))
+
+#Look at the susbtrate utilization by population
+ggplot(data_all, aes(substrate)) + 
+  geom_boxplot(aes(y = data_all$MR_pmol_s))
+
+#Linear correlation by body mass 
+ggplot(data_all, aes(log10(mass))) + 
+  geom_point(aes(y = log10(data_all$MR_pmol_s), col = substrate)) + 
+  geom_smooth(aes(y = log10(data_all$MR_pmol_s), col = substrate), method="lm")
+summary(lm(log10(MR_pmol_s)~log10(mass), data = glucose))
+summary(lm(log10(MR_pmol_s)~log10(mass), data = fa))
+summary(lm(log10(MR_pmol_s)~log10(mass), data = lka))
+summary(lm(log10(MR_pmol_s)~log10(mass), data = inh))
+
+#Linear correlation by heart mass
+ggplot(data_all, aes(log10(heart_mass))) + 
+  geom_point(aes(y = log10(data_all$MR_pmol_s), col = substrate)) + 
+  geom_smooth(aes(y = log10(data_all$MR_pmol_s), col = substrate), method="lm")
+summary(lm(log10(MR_pmol_s)~log10(heart_mass), data = glucose))
+summary(lm(log10(MR_pmol_s)~log10(heart_mass), data = fa))
+summary(lm(log10(MR_pmol_s)~log10(heart_mass), data = lka))
+summary(lm(log10(MR_pmol_s)~log10(heart_mass), data = inh))
+
+
+#Correlation of Heart Mass by Body mass
+ggplot(data_all, aes(mass)) + 
+  geom_point(aes(y = data_all$heart_mass, col = pop)) + 
+  geom_smooth(aes(y = data_all$heart_mass), method="lm")
+summary(lm(heart_mass ~ mass, data = data_all))  
+
+#Heart_mass/body_mass by population 
+ggplot(data_all, aes(pop)) + 
+  geom_boxplot(aes(y = data_all$heart_mass/data_all$mass))  
+  
+```
+
+
+
+
