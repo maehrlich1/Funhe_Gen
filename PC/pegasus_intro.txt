@@ -1,0 +1,341 @@
+#This is an introduction to pegaus / triton
+#By Moritz Ehrlich
+###
+#make a random file inside a directory
+
+$ mkdir ~/blabla
+$ echo “Hello world” > ~/blabla/hello.txt
+
+###
+#use the scp command to upload to pegasus
+#works just like the cp command
+
+$ scp –r ~/blabla username@pegasus.ccs.miami.edu:~/
+
+###
+#copying works both ways! Can also “pull” a directory #from pegasus onto your local machine
+
+$ scp -r username@pegasus.ccs.miami.edu:~/blabla ~/
+
+###
+#the rsync command works in the same way but only copies the portions that have changed – minimizes data transfer
+
+#make another file inside blabla
+
+$ echo “Hi world” > ~/blabla/hi.txt
+
+#use the rsync command to copy the directory to pegasus
+
+$ rsync –r ~/blabla username@pegasus.ccs.miami.edu:~/
+
+#rsync only copied the new hi.txt because hello.txt was already in the destination directory
+
+#rsync is usually the better option. Especially for large transfers when the data stream may be interrupted
+
+### Logging on ###
+#Log in to Pegasus via SSH (Secure Shell Protocol)
+
+$ ssh username@pegasus.ccs.miami.edu
+
+#Type your password when prompted and hit enter
+
+#Exit Pegasus
+
+$ exit
+
+### Using an Alias ###
+#Open your .bash_profile using nano
+
+$ nano ~/.bash_profile
+
+#Create an alias for ssh
+
+alias peg="ssh username@pegasus.ccs.miami.edu”
+
+#Save and reload your updated .bash_profile
+
+$ source ~/.bash_profile
+
+#Try out your new alias!
+
+### Upload Data ###
+#make a directory in your /nethome on pegasus called rna_data and one inside this called raw_reads
+
+$ mkdir –p ~/rna_data/raw_reads
+
+#In your browser, go to:
+
+http://chipster.csc.fi/material/RNAseq_data_analysis/
+
+#Right-click on the link of the first data file “Reads 1” and copy the link
+
+#Download the data straight into pegasus using the wget command
+
+$ wget –q copied_link_here –O ~/rna_data/raw_reads/Reads_1.fastq.gz &
+
+#What happened? What is happening?
+
+$ jobs
+
+#Repeat this for the “Reads 2” file also
+
+### Install Software Locally ###
+
+#What software is available?
+
+$ module avail
+
+#If you need something else you have to install on pegasus yourself
+#Can't do without administrator rights
+#Install locally in your /nethome directory so you can use it
+
+#Set up a software directory tree in your /nethome
+
+$ mkdir –p ~/software/src ~/software/local
+
+#the /src directory will hold the “raw”, downloaded source code. /local will hold the compiled software ready for use.
+
+#We will install a software called GNU parallel to use later on. Go to:
+
+https://www.gnu.org/software/parallel/
+
+#and navigate to the GNU FTP server (via HTTP). Download the latest version of GNU parallel in .tar.bz2 format using the wget command from before
+
+$ wget copied_link_here –P ~/software/src/
+
+#Navigate to your ~/software/src directory. The .tar.bz2 format is an archiving and compression format that can be expanded using the following command
+
+$ tar –xvjf filename.tar.bz2
+
+#Next, navigate into the directory you just extracted!
+
+#Installation instructions can usually be found inside the README file. Use the less command to display file contents without editing them
+
+$ less README 
+
+#hit ‘q’ to quit and exit the view
+
+#We will follow the instructions for “Personal Installation” since we don’t have root access. From within the directory run:
+
+$ ./configure –-prefix=$HOME/software/local/parallel
+
+$ make
+
+$ make install
+
+#These steps
+	-check the system parameters needed to tune the 	installation
+	-compile the program to be able to run on this 	system
+	-and finally move the executable files into the 	location we specified /software/local/parallel
+
+#Navigate into ~/software/local/parallel/bin. Try out your newly installed software by calling the help function
+
+$ ./parallel --help
+
+#Next, navigate to your home directory and try the same thing again. Doesn’t work? Try:
+
+$ ./software/local/parallel/bin/parallel --help
+
+#In order to avoid having to indicate the path to the executable file every time we want to use the software, we can add it to our $PATH variable. This is done in your .bash_profile file.
+
+#Open your .bash_profile using nano and edit the line that reads:
+
+export PATH=$HOME/bin
+
+#and change it to:
+
+export PATH=$HOME/bin:~/software/local/parallel/bin
+
+#Save your updated file and reinitiate it using:
+
+$ source .bash_profile
+
+#You should now be able to call parallel from anywhere
+
+$ parallel --help
+
+### Submitting jobs ###
+
+#Example: running quality control on the RNA reads we downloaded earlier
+#In theory we should move our raw data into the /scratch directory for processing. Since you don’t have scratch space yet (needs to be requested) we will work from nethome. DO NOT DO THIS IN THE FUTURE!
+
+#Create a directory for the results of the QC
+
+$ mkdir ~/rna_data/QC
+
+#Also create two new directories in your /nethome/username
+
+$ mkdir scripts logs
+
+#Go into the ~/scripts directory and download a blank job script
+
+$ wget https://raw.githubusercontent.com/maehrlich1/Funhe_Gen/master/bash/blank.job
+
+#Modify the .job script
+#Modify the header of the blank job script to specify the resources needed for our job
+
+#!/bin/bash
+
+#Job Name
+#BSUB –J rna_qc_1
+
+#Queue
+#BSUB -q general
+
+#Cores
+#BSUB –n 1
+
+#RAM per core (MB)
+#BSUB -R "rusage[mem=1500]”
+
+#Walltime (Optional)
+#BSUB –W 01:00
+
+#Output File (Absolute path)
+#BSUB -o /nethome/username/logs/rna_qc_1.out
+
+#Prepare the .job script
+#After resource requirements are defined, enter the code you wish to run
+
+#Since this job will be processed by another node, start your script by making sure you are in the right working directory.
+
+cd /nethome/username/rna_data
+
+#Next load the modules required for your script. Here we will use the fastqc module
+
+module load fastqc/0.10.1
+
+#Finally enter the code used to run the fastqc software on our data
+
+fastqc –o ./QC raw_reads/*.fastq.gz
+
+#Save your script as ~/scripts/rna_qc_1.job
+
+#Submit the job
+
+#Submit your job to the scheduler
+
+$ bsub < ~/scripts/rna_qc_1.job
+
+#We can now look at the current status of your job
+
+$ bjobs
+
+#Or the real-time output!
+
+$ bpeek
+
+###Speeding up ###
+#Previous script is using a single core on a single node. It processed one file, then the other sequentially. This can easily be run on your laptop.
+
+#Can speed things up by processing both files in parallel! Let’s run the same process on 2 cores with one file being processed on each.
+
+#FastQC software has an option that allows you to specify the number of cores. Edit your rna_qc_1.job script:
+
+fastqc –t 2 –o ./QC raw_reads/*.fastq.gz
+
+#Also edit the number of cores needed in the resource requirements as well as the name of your job and the output file
+
+#Job Name
+#BSUB –J rna_qc_2
+
+#Queue
+#BSUB -q general
+
+#Cores
+#BSUB –n 2
+
+#RAM per core (MB)
+#BSUB -R "rusage[mem=1500]”
+
+#Walltime (Optional)
+#BSUB –W 01:00
+
+#Output File (Absolute path! Can use job name variable)
+#BSUB -o /nethome/username/logs/rna_qc_2.out
+
+#Save your script as rna_qc_2.job
+
+#Submit your updated script
+
+$ bsub < ~/scripts/rna_qc_2.job
+
+#Check the status of your jobs
+
+$ bjobs
+
+#Take a look at the realtime output from both jobs. Now that more than one job is running you will have to specify the job ID which you can get from bjobs.
+
+$ bpeek jobID
+
+#Notice the difference? The second script will likely finish before the first one. You can quit the first script using bkill
+
+$ bkill jobID
+
+### Parallelization - Even faster ###
+#We will run a couple of resource intensive commands so we should get off the login nodes. This submit command takes you from the login node to one of the available compute nodes.
+
+$ bsub –Is –q interactive bash
+
+#What just happened? Where are we?
+
+#Go into your ~/rna_data/raw_reads directory and run:
+
+$ time wc *.fastq.gz
+
+#wc prints the number of lines, words and bytes in each of the two files. The time command times how long this process takes.
+
+#Manual parallelization
+#Use parallel to speed up processing by assigning each file to a separate core
+
+$ time parallel ‘wc {}’ ::: *fastq.gz
+
+#What’s the difference in speed? Why is it not halved?
+
+#This works when submitting jobs to the compute nodes too!
+
+#Move off the compute node once you are finished by typing
+
+$ exit
+
+#Example job output
+#By now the fastqc process we submitted earlier should have finished running. Before examining the output, check the log file of the run using less.
+
+$ less ~/logs/rna_qc_2.log
+
+#The log file gives you information about the duration of the job, the resources used as well as the standard output from your script.
+
+#Always check your log file for errors or warnings before trusting the output of a job!
+
+#Looks good? Check out the QC results in:
+
+$ cd ~/username/rna_data/QC
+$ ls –l
+
+### Tips and Tricks ###
+
+#A job is taking longer than expected and you could do something else in the meantime? Background it!
+
+#Run the wc command on the data files again.
+
+$ wc ~/username/rna_data/raw_reads/*fastq.gz
+
+#Press ctrl+Z to pause the process midway
+
+#Now background it.
+
+$ bg %1
+
+#You’re free to do something else! Check on the status of your process by typing
+
+$ jobs
+
+#Kill the process before it finishes by
+
+$ kill %jobID
+
+##Most of your scripts will be saved in your /nethome on Pegasus. Editing these scripts through nano works but is inconvenient.
+
+##Use an external file handling app such as FUSE for OS X.
+#Lets you mirror the Pegasus file system to your local machine, as if it were an external hard drive!
+#Can now open scripts “locally” using your favorite text editor such as TextWrangler.
