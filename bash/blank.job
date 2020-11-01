@@ -3,27 +3,26 @@
 #Job Name
 #BSUB -J example_job
 
+#Project
+#BSUB -P fun_gen_1
+
 #Queue
-#BSUB -q general
+#BSUB -q normal
 
 #Cores
 #BSUB -n 4
 
-#RAM per core (MB)
-#BSUB -R "rusage[mem=4000]"
+#RAM per core (Use M and G for Mb and Gb)
+#BSUB -R "rusage[mem=4000M]"
 
-#Walltime (Optional)
-#BSUB -W 24:00
-
-#Project
-#BSUB -P fun_gen_1
+#Walltime
+#BSUB -W 01:00
 
 #Output File (Absolute path! Can use job name variable)
-#BSUB -o /nethome/mae120/logs/example.out
+#BSUB -o /nethome/mae120/logs/example_job.out
 
 ###################################################################
 #SETUP
-#load modules
 #change directory
 
 #CODE

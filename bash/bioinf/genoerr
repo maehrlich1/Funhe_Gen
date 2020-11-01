@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+export LC_ALL=en_US.UTF-8
+#set -o errexit
+#set -o pipefail
+#set -o nounset
+
+if [[ $# -eq 0 ]] ; then
+	echo "This command calculates the potential genotyping error due to low read depth"
+    echo 'usage: genoerr VCF_FILE'
+    exit 0
+fi
+
+echo "This command counts the potential genotyping error due to low read depth"
+echo "It reports the error based on a 50% binomial probability of observing the second allele in a heterozygote."
+
+R1ALL=$(grep -Poh '[01][/|][01]:\d+,\d+,\d+:1:' $1 | wc -l)
+
+R1ERR=$(( R1ALL/2 ))
+
+echo "There are UP TO $R1ERR genotyping errors in $R1ALL total genotypes with only 1 read"
+
+R2HET=$(grep -Poh '0[/|]1:\d+,\d+,\d+:2:' $1 | wc -l)
+R2ALL=$(grep -Poh '[01][/|][01]:\d+,\d+,\d+:2:' $1 | wc -l)
+
+R2ERR=$(( R2HET ))
+
+echo "There are approx. $R2ERR genotyping errors in $R2ALL total genotypes with only 2 reads"
+
+R3HET=$(grep -Poh '0[/|]1:\d+,\d+,\d+:3:' $1 | wc -l)
+R3ALL=$(grep -Poh '[01][/|][01]:\d+,\d+,\d+:3:' $1 | wc -l)
+
+R3ERR=$(( R3HET/3 ))
+
+echo "There are approx. $R3ERR genotyping errors in $R3ALL total genotypes with only 3 reads"
+
+R4HET=$(grep -Poh '0[/|]1:\d+,\d+,\d+:4:' $1 | wc -l)
+R4ALL=$(grep -Poh '[01][/|][01]:\d+,\d+,\d+:4:' $1 | wc -l)
+
+R4ERR=$(( R4HET/7 ))
+
+echo "There are approx. $R4ERR genotyping errors in $R4ALL total genotypes with only 4 reads"
+
+R5HET=$(grep -Poh '0[/|]1:\d+,\d+,\d+:5:' $1 | wc -l)
+R5ALL=$(grep -Poh '[01][/|][01]:\d+,\d+,\d+:5:' $1 | wc -l)
+
+R5ERR=$(( R5HET/15 ))
+
+echo "There are approx. $R5ERR genotyping errors in $R5ALL total genotypes with only 5 reads"
+
+R6HET=$(grep -Poh '0[/|]1:\d+,\d+,\d+:6:' $1 | wc -l)
+R6ALL=$(grep -Poh '[01][/|][01]:\d+,\d+,\d+:6:' $1 | wc -l)
+
+R6ERR=$(( R6HET/31 ))
+
+echo "There are approx. $R6ERR genotyping errors in $R6ALL total genotypes with only 6 reads"
+
+R7HET=$(grep -Poh '0[/|]1:\d+,\d+,\d+:7:' $1 | wc -l)
+R7ALL=$(grep -Poh '[01][/|][01]:\d+,\d+,\d+:7:' $1 | wc -l)
+
+R7ERR=$(( R7HET/63 ))
+
+echo "There are approx. $R7ERR genotyping errors in $R7ALL total genotypes with only 7 reads"
+
+IND=$(grep '#' $1 | tail -1 | wc -w)
+IND=$(($IND - 9))
+LOCI=$(grep -v '#' $1 | wc -l)
+MISSING=$(grep -Fwo './.' $1 | wc -l)
+TOTGENO=$(( $IND * $LOCI  ))
+
+echo "$IND individuals by $LOCI loci equals $TOTGENO total possible genotypes"
+TYPGENO=$(( $TOTGENO - $MISSING))
+echo "Total genotypes not counting missing data is $TYPGENO"
+
+TOTERR=$(($R1ERR+$R2ERR+$R3ERR+$R4ERR+$R5ERR+$R6ERR+$R7ERR))
+ERRRATE=$(echo "scale=6;$TOTERR/$TYPGENO" | bc)
+
+echo "Total potential error rate is $ERRRATE"

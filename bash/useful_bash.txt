@@ -18,13 +18,15 @@ ssh -X smomw311@nesh-fe.rz.uni-kiel.de
 rsync —-progress blabla.txt smomw311@nesh-fe.rz.uni-kiel.de:/sfs/fs3/work-geomar7/smomw311/
 
 # transfer data between users
+#On Pegasus, can also change group ownership of a directory by:
+chgrp -R mygroup mydir
+
 cd /sfs/fs3/work-geomar7
 chmod a+rx smomw262
 chmod a-rx smomw287 smomw262
 chmod u+rx smomw287 smomw262
 
 # Update the 'change' of all files in a directory (good for making sure your SCRATCH doesnt get deleted)
-
 find ./ -exec touch {} +
 
 ###------------------------ job management -----------------------####
